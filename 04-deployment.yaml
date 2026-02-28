@@ -38,6 +38,9 @@ spec:
     spec:
       serviceAccountName: pgaudit-forwarder
 
+      imagePullSecrets:
+        - name: regcred
+
       # ── Security context ────────────────────────────────────────────────
       securityContext:
         fsGroup: 1000       # ensures PVC files are group-writable
@@ -54,7 +57,7 @@ spec:
       containers:
         - name: pgaudit-forwarder
           # ▼ Replace with your actual image repository / tag
-          image: localhost/cnpg-pgaudit-forwarder:latest
+          image: vadius45666/cnpg-pgaudit-forwarder:latest
           imagePullPolicy: Always
 
           # ── Environment ─────────────────────────────────────────────────

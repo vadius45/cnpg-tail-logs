@@ -21,6 +21,7 @@ RUN apt-get update && \
         curl \
     && rm -rf /var/lib/apt/lists/*
 
+
 # ── Python dependencies ───────────────────────────────────────────────────────
 COPY app/requirements.txt /tmp/requirements.txt
 RUN apt-get remove -y python3-pip python3-setuptools python3-wheel || true && \
