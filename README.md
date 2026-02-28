@@ -1,6 +1,12 @@
 # pgaudit-forwarder
 
-A Kubernetes pod that **tails CloudNativePG database container logs**, extracts `pgaudit` events, persists them to a PVC-backed folder, and forwards them in real-time to a **Thales DSF Agentless Gateway** via rsyslog over TCP syslog.
+A Kubernetes pod that **tails CloudNativePG database container logs** in its own namespace, extracts `pgaudit` events, persists them to a PVC-backed folder, and forwards them in real-time to a **Thales DSF Agentless Gateway** via rsyslog over TCP syslog.
+
+**Key feature**: The forwarder automatically discovers its namespace from the in-cluster service account, so it monitors CNPG pods only in the same namespace where it's deployed. No need to configure `TARGET_NAMESPACE`.
+
+---
+
+**Cleanup note**: The files `Dockerfile.same-namespace`, `04-deployment-same-namespace.yaml`, and `app/tailer-same-namespace.py` are variant files and can be safely deleted. The main `Dockerfile`, `04-deployment.yaml`, and `app/tailer.py` now implement the same-namespace behavior.
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
@@ -52,7 +58,7 @@ pgaudit-forwarder/
 │   └── 50-pgaudit-dsf.conf  # rsyslog drop-in: imfile → omfwd → DSF
 ├── k8s/
 │   ├── 00-namespace.yaml
-│   ├── 01-rbac.yaml         # ServiceAccount + ClusterRole for pod log access
+│   ├── 01-rbac.yaml         # ServiceAccount + Role for pod log access (namespace-scoped)
 │   ├── 02-secret.yaml       # DSF gateway host/port/protocol
 │   ├── 03-pvc.yaml          # 10 Gi PVC for audit logs
 │   └── 04-deployment.yaml   # Single-replica Deployment
@@ -140,16 +146,9 @@ Edit `k8s/03-pvc.yaml`:
 - `storage` → expected audit log volume (default `10Gi`)
 - `accessModes` → `ReadWriteOnce` for single-node, `ReadWriteMany` for HA
 
-### 3 – Set the watched namespace
+### 3 – Deploy
 
-Edit `k8s/04-deployment.yaml`, env var `TARGET_NAMESPACE`:
-
-```yaml
-- name: TARGET_NAMESPACE
-  value: "production"   # namespace where CloudNativePG runs
-```
-
-### 4 – Apply all manifests
+The pod automatically discovers its namespace from the in-cluster service account, so it will monitor CNPG pods only in that namespace. No configuration needed!
 
 ```bash
 kubectl apply -f k8s/00-namespace.yaml
@@ -166,7 +165,7 @@ kubectl apply -f k8s/04-deployment.yaml
 kubectl get pods -n pgaudit-forwarder
 
 # Stream forwarder logs
-kubectl logs -n pgaudit-forwarder -l app.kubernetes.io/name=pgaudit-forwarder -f
+kube4 – Apply all manifestsn pgaudit-forwarder -l app.kubernetes.io/name=pgaudit-forwarder -f
 
 # Check audit files are being written
 kubectl exec -n pgaudit-forwarder deploy/pgaudit-forwarder -- \
@@ -205,7 +204,6 @@ Refer to the [Thales DSF PostgreSQL Onboarding Guide](https://docs-cybersec.thal
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `TARGET_NAMESPACE` | `default` | Namespace where CloudNativePG pods run |
 | `POD_LABEL_SELECTOR` | `cnpg.io/cluster` | Label selector for DB pods |
 | `CONTAINER_NAME` | `postgres` | Container name inside each pod |
 | `AUDIT_DIR` | `/audit/pgaudit` | PVC mount path for audit files |
@@ -214,6 +212,8 @@ Refer to the [Thales DSF PostgreSQL Onboarding Guide](https://docs-cybersec.thal
 | `DSF_GATEWAY_HOST` | *(required)* | Thales DSF Agentless Gateway hostname or IP |
 | `DSF_GATEWAY_PORT` | `514` | DSF syslog port |
 | `DSF_PROTOCOL` | `tcp` | `tcp` or `udp` |
+
+**Note**: `TARGET_NAMESPACE` is no longer needed. The pod automatically discovers its namespace from the in-cluster service account and monitors CNPG pods only in that namespace.
 
 ---
 
@@ -228,7 +228,7 @@ Refer to the [Thales DSF PostgreSQL Onboarding Guide](https://docs-cybersec.thal
 
 ## Security considerations
 
-- The `ClusterRole` grants `pods/log` read access cluster-wide.  
+- The single-namespace deployments, replace it with a `Role` + `RoleBinding` scoped to the forwarder's namespace (since it only watches pods in its own namespace)
   For a single-namespace deployment, replace it with a `Role` + `RoleBinding` scoped to `TARGET_NAMESPACE`.
 - DSF gateway credentials are stored in a Kubernetes `Secret`; consider sealing it with [Sealed Secrets](https://github.com/bitnami-labs/sealed-secrets) or [External Secrets Operator](https://external-secrets.io/).
 - The forwarder pod drops all Linux capabilities except `NET_BIND_SERVICE` and `DAC_OVERRIDE` (required by rsyslog).
