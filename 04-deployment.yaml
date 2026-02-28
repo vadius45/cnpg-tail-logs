@@ -1,0 +1,140 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# pgaudit-forwarder Deployment
+#
+# Runs a single replica that:
+#   • tails CloudNativePG pod logs in TARGET_NAMESPACE
+#   • extracts pgaudit lines and writes them to /audit/pgaudit (PVC)
+#   • rsyslog forwards those files to the Thales DSF Agentless Gateway
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgaudit-forwarder
+  namespace: pgaudit-forwarder
+  labels:
+    app.kubernetes.io/name: pgaudit-forwarder
+    app.kubernetes.io/component: audit-forwarder
+spec:
+  replicas: 1
+  # IMPORTANT: use Recreate to avoid two pods writing to the same PVC
+  # (only relevant for ReadWriteOnce; switch to RollingUpdate with RWX PVC)
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: pgaudit-forwarder
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: pgaudit-forwarder
+        app.kubernetes.io/component: audit-forwarder
+      annotations:
+        # Force pod restart when the Secret changes
+        checksum/secret: "UPDATE_WITH_kubectl_rollout_restart"
+    spec:
+      serviceAccountName: pgaudit-forwarder
+
+      # ── Security context ────────────────────────────────────────────────
+      securityContext:
+        fsGroup: 1000       # ensures PVC files are group-writable
+
+      # ── Init container: pre-create PVC subdirs ──────────────────────────
+      initContainers:
+        - name: init-dirs
+          image: busybox:1.36
+          command: ["sh", "-c", "mkdir -p /audit/pgaudit && chmod 775 /audit/pgaudit"]
+          volumeMounts:
+            - name: audit-storage
+              mountPath: /audit
+
+      containers:
+        - name: pgaudit-forwarder
+          # ▼ Replace with your actual image repository / tag
+          image: your-registry/pgaudit-forwarder:latest
+          imagePullPolicy: Always
+
+          # ── Environment ─────────────────────────────────────────────────
+          env:
+            # ── Kubernetes watch target ──────────────────────────────────
+            - name: TARGET_NAMESPACE
+              value: "default"              # ← namespace where CNPG runs
+            - name: POD_LABEL_SELECTOR
+              value: "cnpg.io/cluster"      # selects all CNPG cluster pods
+            - name: CONTAINER_NAME
+              value: "postgres"
+            - name: RECONNECT_DELAY
+              value: "5"
+            - name: LOG_LEVEL
+              value: "INFO"
+            - name: AUDIT_DIR
+              value: "/audit/pgaudit"
+
+            # ── DSF gateway (injected from Secret) ───────────────────────
+            - name: DSF_GATEWAY_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: pgaudit-dsf-gateway
+                  key: DSF_GATEWAY_HOST
+            - name: DSF_GATEWAY_PORT
+              valueFrom:
+                secretKeyRef:
+                  name: pgaudit-dsf-gateway
+                  key: DSF_GATEWAY_PORT
+            - name: DSF_PROTOCOL
+              valueFrom:
+                secretKeyRef:
+                  name: pgaudit-dsf-gateway
+                  key: DSF_PROTOCOL
+
+          # ── Volume mounts ────────────────────────────────────────────────
+          volumeMounts:
+            - name: audit-storage
+              mountPath: /audit
+            - name: rsyslog-spool
+              mountPath: /var/spool/rsyslog
+
+          # ── Resources ────────────────────────────────────────────────────
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+
+          # ── Probes ───────────────────────────────────────────────────────
+          # rsyslog writes a pid file; use it as a liveness indicator.
+          livenessProbe:
+            exec:
+              command: ["pgrep", "-x", "rsyslogd"]
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            failureThreshold: 3
+
+          readinessProbe:
+            exec:
+              command: ["test", "-d", "/audit/pgaudit"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          # ── Security ─────────────────────────────────────────────────────
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false   # rsyslog writes to /var/run, /var/spool
+            capabilities:
+              drop: ["ALL"]
+              add:
+                - NET_BIND_SERVICE   # rsyslog may need this for syslog port
+                - DAC_OVERRIDE       # needed to write rsyslog pid/spool files
+
+      # ── Volumes ────────────────────────────────────────────────────────────
+      volumes:
+        - name: audit-storage
+          persistentVolumeClaim:
+            claimName: pgaudit-logs
+        - name: rsyslog-spool
+          emptyDir: {}              # ephemeral spool; survives pod restarts via queue file on PVC
+
+      # ── DNS / restart ───────────────────────────────────────────────────────
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30

@@ -1,0 +1,44 @@
+# ── ServiceAccount ────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pgaudit-forwarder
+  namespace: pgaudit-forwarder
+  labels:
+    app.kubernetes.io/name: pgaudit-forwarder
+
+---
+# ── ClusterRole – read pods + stream pod logs across all namespaces ───────────
+# Scope: the forwarder needs to LIST/WATCH pods and GET pod logs.
+# If you want to restrict to a single namespace, switch to a Role +
+# RoleBinding in TARGET_NAMESPACE instead.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: pgaudit-forwarder
+  labels:
+    app.kubernetes.io/name: pgaudit-forwarder
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get", "list", "watch"]
+
+---
+# ── ClusterRoleBinding ────────────────────────────────────────────────────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pgaudit-forwarder
+  labels:
+    app.kubernetes.io/name: pgaudit-forwarder
+subjects:
+  - kind: ServiceAccount
+    name: pgaudit-forwarder
+    namespace: pgaudit-forwarder
+roleRef:
+  kind: ClusterRole
+  name: pgaudit-forwarder
+  apiGroup: rbac.authorization.k8s.io

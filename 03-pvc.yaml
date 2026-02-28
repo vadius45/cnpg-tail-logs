@@ -1,0 +1,21 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PersistentVolumeClaim – stores pgaudit log files
+#
+# Adjust storageClassName and storage size to match your cluster.
+# ReadWriteOnce is sufficient for a single-replica forwarder pod.
+# Use ReadWriteMany (NFS / CephFS / EFS) if you need multi-replica.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: pgaudit-logs
+  namespace: pgaudit-forwarder
+  labels:
+    app.kubernetes.io/name: pgaudit-forwarder
+spec:
+  accessModes:
+    - ReadWriteOnce          # change to ReadWriteMany for NFS/CephFS
+  storageClassName: standard # ← adjust to your storage class
+  resources:
+    requests:
+      storage: 10Gi          # ← adjust to expected audit volume

@@ -1,0 +1,22 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# pgaudit-forwarder – Kubernetes manifests
+#
+# Deploy order:
+#   kubectl apply -f k8s/namespace.yaml      (if target ns doesn't exist)
+#   kubectl apply -f k8s/rbac.yaml
+#   kubectl apply -f k8s/secret.yaml         (edit DSF creds first!)
+#   kubectl apply -f k8s/pvc.yaml
+#   kubectl apply -f k8s/deployment.yaml
+#
+# The forwarder pod can live in ANY namespace; it watches TARGET_NAMESPACE
+# via the Kubernetes API.  Here we put it in "pgaudit-forwarder".
+# ─────────────────────────────────────────────────────────────────────────────
+
+---
+# ── Namespace for the forwarder itself ────────────────────────────────────────
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pgaudit-forwarder
+  labels:
+    app.kubernetes.io/name: pgaudit-forwarder
