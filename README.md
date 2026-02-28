@@ -6,43 +6,52 @@ A Kubernetes pod that **tails CloudNativePG database container logs** in its own
 
 ---
 
-**Cleanup note**: The files `Dockerfile.same-namespace`, `04-deployment-same-namespace.yaml`, and `app/tailer-same-namespace.py` are variant files and can be safely deleted. The main `Dockerfile`, `04-deployment.yaml`, and `app/tailer.py` now implement the same-namespace behavior.
+## Deployment
 
-```
-┌────────────────────────────────────────────────────────────────────┐
-│  CloudNativePG namespace (e.g. "default")                         │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐            │
-│  │ pg-cluster-1 │  │ pg-cluster-2 │  │ pg-cluster-3 │            │
-│  │  (postgres)  │  │  (postgres)  │  │  (postgres)  │            │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘            │
-│         │ pod logs (k8s API)  │                │                   │
-└─────────┼────────────────────┼────────────────┼───────────────────┘
-          │                    │                │
-          ▼                    ▼                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  pgaudit-forwarder namespace                                    │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │                   pgaudit-forwarder pod                   │  │
-│  │                                                           │  │
-│  │  ┌──────────────────┐    filter      ┌─────────────────┐ │  │
-│  │  │  tailer.py       │ ──logger=pgaudit─▶ /audit/pgaudit │ │  │
-│  │  │  (Python/k8s)    │                │  *.log (PVC)    │ │  │
-│  │  └──────────────────┘                └────────┬────────┘ │  │
-│  │                                               │           │  │
-│  │  ┌──────────────────┐   imfile (inotify)      │           │  │
-│  │  │  rsyslogd        │ ◀───────────────────────┘           │  │
-│  │  │  50-pgaudit-dsf  │                                     │  │
-│  │  └────────┬─────────┘                                     │  │
-│  └───────────┼───────────────────────────────────────────────┘  │
-└──────────────┼──────────────────────────────────────────────────┘
-               │  TCP syslog (RFC 5424)
-               ▼
-     ┌──────────────────────┐
-     │  Thales DSF          │
-     │  Agentless Gateway   │
-     │  :514/tcp            │
-     └──────────────────────┘
-```
+1. **Namespace**  
+   Deploy both CNPG and the forwarder in the same namespace (e.g., `pgaudit-forwarder`).
+
+2. **RBAC**  
+   The forwarder uses a namespace-scoped `Role` and `RoleBinding` (see `01-rbac.yaml`).  
+   **No cluster-wide permissions are required.**
+
+3. **Service Account**  
+   The `pgaudit-forwarder` ServiceAccount is created by `01-rbac.yaml`.
+
+4. **Apply manifests**
+   ```sh
+   kubectl apply -f 00-namespace.yaml
+   kubectl apply -f 01-rbac.yaml
+   kubectl apply -f 02-secret.yaml
+   kubectl apply -f 03-pvc.yaml
+   kubectl apply -f 04-deployment.yaml
+   ```
+
+5. **Configuration**  
+   - The forwarder auto-discovers its namespace.
+   - No `TARGET_NAMESPACE` env var is needed.
+   - It only tails CNPG pods in its own namespace.
+
+---
+
+## Security
+
+- All RBAC is **namespace-scoped**.
+- No cluster-admin or cross-namespace access is required.
+
+---
+
+## Vulnerabilities
+
+- All Python dependencies are up-to-date and patched for known HIGH CVEs.
+- Remaining vulnerabilities are only in system packages with no available fixes.
+
+---
+
+## Cleanup
+
+- Only the same-namespace version is present.
+- No duplicate or legacy files.
 
 ---
 

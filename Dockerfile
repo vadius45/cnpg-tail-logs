@@ -1,6 +1,6 @@
 # ─── pgaudit-forwarder ────────────────────────────────────────────────────────
 # Ubuntu-based container that:
-#   1. Tails CloudNativePG pod logs in a target namespace
+#   1. Tails CloudNativePG pod logs ONLY in its own namespace
 #   2. Extracts pgaudit events and writes them to a PVC-backed folder
 #   3. Ships those events to a Thales DSF Agentless Gateway via rsyslog/TCP syslog
 # ─────────────────────────────────────────────────────────────────────────────
@@ -8,14 +8,13 @@
 FROM ubuntu:24.04
 
 LABEL org.opencontainers.image.title="pgaudit-forwarder" \
-      org.opencontainers.image.description="Forwards CloudNativePG pgaudit events to Thales DSF" \
+      org.opencontainers.image.description="Forwards CloudNativePG pgaudit events (same namespace only) to Thales DSF" \
       org.opencontainers.image.source="https://github.com/your-org/pgaudit-forwarder"
 
 # ── System packages ───────────────────────────────────────────────────────────
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         python3 \
-        python3-pip \
         python3-venv \
         rsyslog \
         ca-certificates \
@@ -24,7 +23,10 @@ RUN apt-get update && \
 
 # ── Python dependencies ───────────────────────────────────────────────────────
 COPY app/requirements.txt /tmp/requirements.txt
-RUN pip3 install --no-cache-dir --break-system-packages -r /tmp/requirements.txt
+RUN apt-get remove -y python3-pip python3-setuptools python3-wheel || true && \
+    rm -f /usr/lib/python*/EXTERNALLY-MANAGED && \
+    curl -sSL https://bootstrap.pypa.io/get-pip.py | python3 && \
+    python3 -m pip install --no-cache-dir setuptools>=78.1.1 wheel>=0.46.2 kubernetes>=28.1.0
 
 # ── Application code ──────────────────────────────────────────────────────────
 COPY app/tailer.py /app/tailer.py

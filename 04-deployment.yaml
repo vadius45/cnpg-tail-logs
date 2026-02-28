@@ -2,9 +2,13 @@
 # pgaudit-forwarder Deployment
 #
 # Runs a single replica that:
-#   • tails CloudNativePG pod logs in TARGET_NAMESPACE
+#   • automatically discovers its own namespace
+#   • tails CloudNativePG pod logs ONLY in that namespace
 #   • extracts pgaudit lines and writes them to /audit/pgaudit (PVC)
 #   • rsyslog forwards those files to the Thales DSF Agentless Gateway
+#
+# ADVANTAGE: No need to specify TARGET_NAMESPACE; the pod automatically
+# monitors only cnpg pods in its own namespace. Simpler RBAC scope.
 # ─────────────────────────────────────────────────────────────────────────────
 apiVersion: apps/v1
 kind: Deployment
@@ -54,10 +58,10 @@ spec:
           imagePullPolicy: Always
 
           # ── Environment ─────────────────────────────────────────────────
+          # Note: No TARGET_NAMESPACE needed! Pod discovers its own namespace
+          # from the service account at /var/run/secrets/kubernetes.io/serviceaccount/namespace
           env:
             # ── Kubernetes watch target ──────────────────────────────────
-            - name: TARGET_NAMESPACE
-              value: "default"              # ← namespace where CNPG runs
             - name: POD_LABEL_SELECTOR
               value: "cnpg.io/cluster"      # selects all CNPG cluster pods
             - name: CONTAINER_NAME
