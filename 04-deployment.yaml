@@ -14,7 +14,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: pgaudit-forwarder
-  namespace: pgaudit-forwarder
+  # namespace: <your-namespace>
   labels:
     app.kubernetes.io/name: pgaudit-forwarder
     app.kubernetes.io/component: audit-forwarder
@@ -54,7 +54,7 @@ spec:
       containers:
         - name: pgaudit-forwarder
           # ▼ Replace with your actual image repository / tag
-          image: your-registry/pgaudit-forwarder:latest
+          image: localhost/cnpg-pgaudit-forwarder:latest
           imagePullPolicy: Always
 
           # ── Environment ─────────────────────────────────────────────────

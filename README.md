@@ -9,25 +9,23 @@ A Kubernetes pod that **tails CloudNativePG database container logs** in its own
 ## Deployment
 
 1. **Namespace**  
-   Deploy both CNPG and the forwarder in the same namespace (e.g., `pgaudit-forwarder`).
-
-2. **RBAC**  
-   The forwarder uses a namespace-scoped `Role` and `RoleBinding` (see `01-rbac.yaml`).  
-   **No cluster-wide permissions are required.**
-
-3. **Service Account**  
-   The `pgaudit-forwarder` ServiceAccount is created by `01-rbac.yaml`.
-
-4. **Apply manifests**
+   Create or use any namespace you want. All manifests are now namespace-agnostic. Example:
    ```sh
-   kubectl apply -f 00-namespace.yaml
-   kubectl apply -f 01-rbac.yaml
-   kubectl apply -f 02-secret.yaml
-   kubectl apply -f 03-pvc.yaml
-   kubectl apply -f 04-deployment.yaml
+   kubectl create namespace my-audit-ns
    ```
 
-5. **Configuration**  
+2. **Install**  
+   Apply each manifest with your chosen namespace:
+   ```sh
+   kubectl apply -n my-audit-ns -f 00-namespace.yaml   # optional, if you want to create the namespace
+   kubectl apply -n my-audit-ns -f 01-rbac.yaml
+   kubectl apply -n my-audit-ns -f 02-secret.yaml
+   kubectl apply -n my-audit-ns -f 03-pvc.yaml
+   kubectl apply -n my-audit-ns -f 04-deployment.yaml
+   ```
+   Or edit the `namespace:` field in each manifest before applying.
+
+3. **Configuration**  
    - The forwarder auto-discovers its namespace.
    - No `TARGET_NAMESPACE` env var is needed.
    - It only tails CNPG pods in its own namespace.

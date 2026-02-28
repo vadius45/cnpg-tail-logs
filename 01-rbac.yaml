@@ -3,12 +3,11 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: pgaudit-forwarder
-  namespace: pgaudit-forwarder
-  labels:
-    app.kubernetes.io/name: pgaudit-forwarder
+  # Set the namespace at install time
+  # namespace: <your-namespace>
 
 ---
-# ── Role – read pods + stream pod logs within the forwarder namespace ──────
+# ── Role (namespace-scoped) ──────────────────────────────────────────────────────────────
 # Scope: this deployment monitors pods only in its own namespace, so
 # a namespace-scoped Role + RoleBinding is sufficient and more secure than
 # a ClusterRole/ClusterRoleBinding.
@@ -16,9 +15,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: pgaudit-forwarder
-  namespace: pgaudit-forwarder
-  labels:
-    app.kubernetes.io/name: pgaudit-forwarder
+  # namespace: <your-namespace>
 rules:
   - apiGroups: [""]
     resources: ["pods"]
@@ -33,13 +30,11 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: pgaudit-forwarder
-  namespace: pgaudit-forwarder
-  labels:
-    app.kubernetes.io/name: pgaudit-forwarder
+  # namespace: <your-namespace>
 subjects:
   - kind: ServiceAccount
     name: pgaudit-forwarder
-    namespace: pgaudit-forwarder
+    # namespace: <your-namespace>
 roleRef:
   kind: Role
   name: pgaudit-forwarder
